@@ -32,6 +32,13 @@ async def compress_image(file: UploadFile = File(...)):
         with lock:
             image_data = await file.read()
             image = Image.open(io.BytesIO(image_data))
+            # support to save an image with transparency (RGBA mode) as JPEG format
+            if image.mode == 'RGBA':
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                background.paste(image, mask=image.split()[-1])
+                image = background
+            elif image.mode not in ('RGB', 'L'):
+                image = image.convert('RGB')
             
             original_size = len(image_data)
             
@@ -47,11 +54,15 @@ async def compress_image(file: UploadFile = File(...)):
                 "compressed_size": compressed_size,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
+            # handle filename with chinese characters
+            safe_filename = file.filename.encode('ascii', 'ignore').decode('ascii') if file.filename else 'image'
+            if not safe_filename:
+                safe_filename = 'image'
             
             return Response(
                 content=output.getvalue(),
                 media_type="image/jpeg",
-                headers={"Content-Disposition": f"attachment; filename=compressed_{file.filename}"}
+                headers={"Content-Disposition": f"attachment; filename=compressed_{safe_filename}.jpg"}
             )
             
     except Exception as e:
