@@ -1,11 +1,14 @@
 import io
 import threading
+from datetime import datetime
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import Response
 
 app = FastAPI()
 lock = threading.Lock()
+
+history = []
 
 @app.get("/")
 async def home():
@@ -21,10 +24,20 @@ async def compress_image(file: UploadFile = File(...)):
             image_data = await file.read()
             image = Image.open(io.BytesIO(image_data))
             
-            # Just compress by reducing quality, keep original size
+            original_size = len(image_data)
+            
             output = io.BytesIO()
             image.save(output, format='JPEG', quality=70)
             output.seek(0)
+            
+            compressed_size = len(output.getvalue())
+            
+            history.append({
+                "filename": file.filename,
+                "original_size": original_size,
+                "compressed_size": compressed_size,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
             
             return Response(
                 content=output.getvalue(),
@@ -34,3 +47,11 @@ async def compress_image(file: UploadFile = File(...)):
             
     except Exception as e:
         return {"error": f"Failed to compress image: {str(e)}"}
+
+@app.get("/history")
+async def get_history():
+    with lock:
+        return {
+            "total_processed": len(history),
+            "history": history
+        }
