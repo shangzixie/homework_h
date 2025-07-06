@@ -1,14 +1,36 @@
-from typing import Union
-from fastapi import FastAPI
+import io
+import threading
+from PIL import Image
+from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import Response
 
 app = FastAPI()
+lock = threading.Lock()
 
 @app.get("/")
-async def read_root():
-    return {"Hello": "World"}
+async def home():
+    return {"message": "Image Compression Service"}
 
-
-@app.get("/items/{item_id}")
-async def read_item(item_id: int, q: Union[str, None] = None):
-    return {"item_id": item_id, "q": q}
-
+@app.post("/compress")
+async def compress_image(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith('image/'):
+        return {"error": "Please upload an image file"}
+    
+    try:
+        with lock:
+            image_data = await file.read()
+            image = Image.open(io.BytesIO(image_data))
+            
+            # Just compress by reducing quality, keep original size
+            output = io.BytesIO()
+            image.save(output, format='JPEG', quality=70)
+            output.seek(0)
+            
+            return Response(
+                content=output.getvalue(),
+                media_type="image/jpeg",
+                headers={"Content-Disposition": f"attachment; filename=compressed_{file.filename}"}
+            )
+            
+    except Exception as e:
+        return {"error": f"Failed to compress image: {str(e)}"}
