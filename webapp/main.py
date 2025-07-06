@@ -4,10 +4,19 @@ from datetime import datetime
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import Response
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-lock = threading.Lock()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+lock = threading.Lock()
 history = []
 
 @app.get("/")

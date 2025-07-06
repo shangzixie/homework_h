@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>图像压缩服务</title>
+</head>
+<body>
+    <h1>图像压缩服务</h1>
+    <h2>上传图像</h2>
+    <input type="file" id="imageFile" accept="image/*">
+    <button id="compressBtn" disabled>压缩图像</button>
+    <div id="fileName"></div>
+    
+    <div id="resultSection" style="display: none;">
+        <h2>压缩结果</h2>
+        <p>原始大小: <span id="originalSize">0 KB</span></p>
+        <p>压缩后大小: <span id="compressedSize">0 KB</span></p>
+        <p>压缩比: <span id="compressionRatio">0%</span></p>
+        
+        <h3>原始图像</h3>
+        <img id="originalImage" src="" alt="原始图像" style="max-width: 300px;">
+        <h3>压缩后图像</h3>
+        <img id="compressedImage" src="" alt="压缩后图像" style="max-width: 300px;">
+        <br>
+        <button id="downloadBtn">下载压缩图像</button>
+    </div>
+    
+    <h2>压缩历史</h2>
+    <button id="historyBtn">查看历史</button>
+    <div id="historyList" style="display: none;"></div>
+    <div id="messageArea"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let compressedImageBlob = null;
+
+        // 文件选择处理
+        document.getElementById('imageFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = `已选择: ${file.name}`;
+                document.getElementById('compressBtn').disabled = false;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('originalImage').src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 压缩按钮处理
+        document.getElementById('compressBtn').addEventListener('click', async function() {
+            const fileInput = document.getElementById('imageFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('请先选择一个图像文件');
+                return;
+            }
+
+            try {
+                document.getElementById('compressBtn').disabled = true;
+                document.getElementById('compressBtn').textContent = '压缩中...';
+                
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${API_BASE}/compress`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const error = await response.json();
+                    throw new Error(error.error || '压缩失败');
+                }
+
+                const compressedBlob = await response.blob();
+                compressedImageBlob = compressedBlob;
+                
+                const compressedImageUrl = URL.createObjectURL(compressedBlob);
+                document.getElementById('compressedImage').src = compressedImageUrl;
+                
+                const originalSize = file.size;
+                const compressedSize = compressedBlob.size;
+                const compressionRatio = Math.round((1 - compressedSize / originalSize) * 100);
+                
+                document.getElementById('originalSize').textContent = formatFileSize(originalSize);
+                document.getElementById('compressedSize').textContent = formatFileSize(compressedSize);
+                document.getElementById('compressionRatio').textContent = `${compressionRatio}%`;
+                
+                document.getElementById('resultSection').style.display = 'block';
+                
+                alert('图像压缩成功！');
+                
+            } catch (error) {
+                alert(`压缩失败: ${error.message}`);
+            } finally {
+                document.getElementById('compressBtn').disabled = false;
+                document.getElementById('compressBtn').textContent = '压缩图像';
+            }
+        });
+
+        // 下载按钮处理
+        document.getElementById('downloadBtn').addEventListener('click', function() {
+            if (compressedImageBlob) {
+                const url = URL.createObjectURL(compressedImageBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `compressed_${document.getElementById('imageFile').files[0].name}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        });
+
+        document.getElementById('historyBtn').addEventListener('click', async function() {
+            const historyList = document.getElementById('historyList');
+            
+            if (historyList.style.display === 'block') {
+                historyList.style.display = 'none';
+                return;
+            }
+
+            try {
+                historyList.innerHTML = '加载中...';
+                historyList.style.display = 'block';
+                
+                const response = await fetch(`${API_BASE}/history`);
+                const data = await response.json();
+                
+                if (data.history && data.history.length > 0) {
+                    let historyHtml = `<h4>总计处理: ${data.total_processed} 个文件</h4>`;
+                    
+                    data.history.forEach(item => {
+                        const compressionRatio = Math.round((1 - item.compressed_size / item.original_size) * 100);
+                        historyHtml += `
+                            <div>
+                                <strong>${item.filename}</strong><br>
+                                时间: ${item.timestamp}<br>
+                                原始大小: ${formatFileSize(item.original_size)} → 
+                                压缩后: ${formatFileSize(item.compressed_size)} 
+                                (节省 ${compressionRatio}%)<br><br>
+                            </div>
+                        `;
+                    });
+                    
+                    historyList.innerHTML = historyHtml;
+                } else {
+                    historyList.innerHTML = '<p>暂无压缩历史记录</p>';
+                }
+                
+            } catch (error) {
+                historyList.innerHTML = `加载历史记录失败: ${error.message}`;
+            }
+        });
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html> 
