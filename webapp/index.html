@@ -97,6 +97,12 @@
                 
                 document.getElementById('resultSection').style.display = 'block';
                 
+                // 如果历史记录正在显示，自动刷新
+                const historyList = document.getElementById('historyList');
+                if (historyList.style.display === 'block') {
+                    await loadHistory();
+                }
+                
                 alert('图像压缩成功！');
                 
             } catch (error) {
@@ -121,17 +127,12 @@
             }
         });
 
-        document.getElementById('historyBtn').addEventListener('click', async function() {
+        // 加载历史记录的函数
+        async function loadHistory() {
             const historyList = document.getElementById('historyList');
             
-            if (historyList.style.display === 'block') {
-                historyList.style.display = 'none';
-                return;
-            }
-
             try {
                 historyList.innerHTML = '加载中...';
-                historyList.style.display = 'block';
                 
                 const response = await fetch(`${API_BASE}/history`);
                 const data = await response.json();
@@ -160,6 +161,18 @@
             } catch (error) {
                 historyList.innerHTML = `加载历史记录失败: ${error.message}`;
             }
+        }
+
+        document.getElementById('historyBtn').addEventListener('click', async function() {
+            const historyList = document.getElementById('historyList');
+            
+            if (historyList.style.display === 'block') {
+                historyList.style.display = 'none';
+                return;
+            }
+
+            historyList.style.display = 'block';
+            await loadHistory();
         });
 
         function formatFileSize(bytes) {
