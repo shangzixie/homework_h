@@ -2,6 +2,8 @@
 
 ## Install all dependencies
 
+it requires Python 3.13.5
+
 ```shell
 sh install_pkg.sh
 ```
